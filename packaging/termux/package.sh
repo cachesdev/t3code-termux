@@ -14,7 +14,8 @@ image="${3:-termux/termux-docker:aarch64}"
 scripts="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 home=/data/data/com.termux/files/home
-container="$(docker run --detach "$image" sleep infinity)"
+# Deny hard links with EACCES, as Android's SELinux policy does in app storage.
+container="$(docker run --detach --security-opt seccomp="$scripts/android-seccomp.json" "$image" sleep infinity)"
 trap 'docker rm --force "$container" > /dev/null' EXIT
 
 docker cp "$stage" "$container:$home/stage"

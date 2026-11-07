@@ -33,7 +33,8 @@ import { themeCommand } from "./cli/theme.ts";
 import { traceCommand } from "./cli/trace.ts";
 import { triageCommand } from "./cli/triage.ts";
 import { connectCommand, statusCommand, upCommand } from "./cli/up.ts";
-import { isTermux, termuxCommands } from "./cli/termux.ts";
+import { termuxCommands } from "./cli/termux.ts";
+import { isTermux } from "./termux.ts";
 
 const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
 

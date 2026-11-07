@@ -6,6 +6,7 @@
  */
 import { isEntrypoint } from "./entrypoint.ts";
 import { enableCliCompileCache } from "./cliCompileCache.ts";
+import { installLinkFallback, isTermux } from "./termux.ts";
 
 if (
   isEntrypoint({
@@ -14,6 +15,8 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
+  // Before any module captures fs.link.
+  if (isTermux) installLinkFallback();
   const command = process.argv[2];
   // Guard sockets before either dispatch path can load outbound-capable modules.
   const { ignoreMacosTypeOfServiceEinval } = await import("./outboundHttp.ts");

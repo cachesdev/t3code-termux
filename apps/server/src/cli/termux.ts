@@ -8,9 +8,6 @@ import { Argument, Command } from "effect/cli";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-// oxlint-disable-next-line t3code/no-global-process-runtime -- The command list is built before any Effect runs.
-export const isTermux = process.platform === "android";
-
 const PACKAGE_NAME = "t3code-termux";
 
 const KEEP_RUNNING_HINT =

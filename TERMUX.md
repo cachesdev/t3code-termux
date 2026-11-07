@@ -6,11 +6,13 @@ This fork publishes the T3 Code server to npm as `t3code-termux`, built for Term
 
 Upstream files the fork edits. These are where merge conflicts land:
 
+- `apps/server/src/bin.ts`: calls `installLinkFallback()` on Termux at the top of the entrypoint block, before any dynamic import. It must stay ahead of every module that captures `fs.link`.
 - `apps/server/src/binCli.ts`: `makeCli` takes a `termux` flag, and four entries in the subcommand list read `termux ? termuxCommands.<name> : <name>Command`. Keep that shape whatever upstream does to the list.
 - `AGENTS.md`: one line under the title that points here.
 
 Fork-only files. These never conflict, but they depend on upstream internals:
 
+- `apps/server/src/termux.ts`: `isTermux`, and `installLinkFallback`, which patches `node:fs` so a hard link denied with EACCES or EPERM becomes a copy with `COPYFILE_EXCL`. Android's SELinux policy denies hard links in app storage, and the server publishes secrets, the environment ID, attachments and database snapshots with `link`. The patch sits below Effect because several layers provide their own `FileSystem` (`NodeHttpServer.layer` exports `NodeServices`), so wrapping one `FileSystem` layer misses the others.
 - `apps/server/src/cli/termux.ts`: Android versions of `update` (runs `npm install --global t3code-termux@<version>`), `up`, `service` and `uninstall` (these print what to do in Termux). The upstream versions manage downloaded runtimes and system services that Android lacks.
 - `packaging/termux/package.json`: the npm manifest template. Its `version` is the release version, `<upstream version>-termux.<n>`.
 - `packaging/termux/stage.ts`: copies the server and web builds and pins the runtime packages. It imports `selectCliRuntimeExternalDependencies` from `scripts/lib/cli-external-packages.ts` and reads `patchedDependencies` from `pnpm-workspace.yaml`.
@@ -47,4 +49,5 @@ Users install with `npm install --global t3code-termux` or `npx`, and npm 12 ski
 - npm packs a bundled package using that package's own `files` list. node-pty's list has `prebuilds/` but not `build/`, so `pty.node` moves to `prebuilds/android-arm64/`. The node-pty loader checks that path too.
 - The prebuilt `@yuuang/ffi-rs-android-arm64` addon imports `__clear_cache`, which Android's libc does not export, and fff loads ffi-rs at server startup. `finalize.sh` builds `libclear_cache.so` from clang's runtime, links the addon to it with `patchelf`, and adds the library to that package's `files` list. Check whether a newer ffi-rs still needs this before you remove it.
 - `os` and `cpu` in the manifest restrict installs to android/arm64. To test on an x86_64 machine with `package.sh <stage> <out> termux/termux-docker:x86_64`, add `x64` to `cpu` in the staged copy. Expect the fff check to fail there, since fff and ffi-rs ship no android-x64 build.
+- `package.sh` runs the container with `android-seccomp.json`, which denies `link` and `linkat` with EACCES as Android does. Docker does not enforce Android's SELinux policy, so other Android-only denials still show up only on a real phone. Add them to that profile when you find them.
 - Builds have no T3 Connect or account sign-in, because those need public config that upstream bakes in at release time.
