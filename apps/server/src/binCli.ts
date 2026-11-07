@@ -33,6 +33,7 @@ import { themeCommand } from "./cli/theme.ts";
 import { traceCommand } from "./cli/trace.ts";
 import { triageCommand } from "./cli/triage.ts";
 import { connectCommand, statusCommand, upCommand } from "./cli/up.ts";
+import { isTermux, termuxCommands } from "./cli/termux.ts";
 
 const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
 
@@ -60,7 +61,7 @@ const connectUnavailableCommand = Command.make("connect", {
   ),
 );
 
-export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
+export const makeCli = ({ cloudEnabled = hasCloudPublicConfig, termux = isTermux } = {}) =>
   Command.make("t3", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription(
       "Run T3 Code in this terminal and open it in your browser. To use it from your other devices, run `t3 up`.",
@@ -84,11 +85,11 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       browserCommand,
       projectCommand,
       threadCommand,
-      upCommand,
+      termux ? termuxCommands.up : upCommand,
       statusCommand,
-      serviceCommand,
-      updateCommand,
-      uninstallCommand,
+      termux ? termuxCommands.service : serviceCommand,
+      termux ? termuxCommands.update : updateCommand,
+      termux ? termuxCommands.uninstall : uninstallCommand,
       serviceLauncherCommand,
       claudeHistoryCommand,
       sshHelperCommand,
