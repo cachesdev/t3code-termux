@@ -1,0 +1,112 @@
+name: Termux package
+
+# Builds t3code-termux. Pushing a termux-v<version> tag also publishes it to npm.
+on:
+  push:
+    tags:
+      - "termux-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: termux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build server and web app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-ci-deps
+
+      - name: Read the package version
+        id: version
+        run: |
+          version="$(jq -r .version packaging/termux/package.json)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "upstream=${version%%-termux.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ "$TAG" != "termux-v$VERSION" ]]; then
+            echo "Tag $TAG does not match packaging/termux/package.json version $VERSION" >&2
+            exit 1
+          fi
+
+      # The server reports this version to clients, so it matches the upstream release.
+      - name: Stamp the upstream version
+        run: node scripts/update-release-package-versions.ts "${{ steps.version.outputs.upstream }}"
+
+      - name: Build the web app
+        run: vp run --filter @t3tools/web build
+
+      - name: Build the server
+        working-directory: apps/server
+        run: node --run build:bundle
+
+      - name: Stage the package
+        run: node packaging/termux/stage.ts "$RUNNER_TEMP/stage"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: termux-stage
+          path: ${{ runner.temp }}/stage
+          retention-days: 1
+
+  package:
+    name: Package and test in Termux
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: packaging/termux
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: termux-stage
+          path: ${{ runner.temp }}/stage
+
+      - name: Build the package in Termux and test it
+        run: bash packaging/termux/package.sh "$RUNNER_TEMP/stage" "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: t3code-termux
+          path: ${{ runner.temp }}/out/*.tgz
+
+  publish:
+    name: Publish to npm
+    needs: [build, package]
+    if: startsWith(github.ref, 'refs/tags/termux-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: t3code-termux
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./t3code-termux-*.tgz --access public --tag latest --provenance

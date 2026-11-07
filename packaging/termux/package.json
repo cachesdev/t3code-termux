@@ -1,0 +1,33 @@
+{
+  "name": "t3code-termux",
+  "version": "0.1.7-termux.1",
+  "description": "Unofficial build of the T3 Code server for Termux on Android.",
+  "keywords": [
+    "android",
+    "t3code",
+    "termux"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cachesdev/t3code.git",
+    "directory": "packaging/termux"
+  },
+  "bin": {
+    "t3": "dist/bin.mjs",
+    "t3code-termux": "dist/bin.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "os": [
+    "android"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24.10"
+  }
+}
