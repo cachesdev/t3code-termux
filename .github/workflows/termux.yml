@@ -88,7 +88,7 @@ jobs:
           path: ${{ runner.temp }}/out/*.tgz
 
   # npm reviews new versions before they go live, sometimes for a long time.
-  # The release tarball is installable right away with `npm install -g <url>`.
+  # The release tarball is installable right away.
   release:
     name: GitHub release
     needs: [build, package]
@@ -108,8 +108,10 @@ jobs:
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/t3code-termux-$VERSION.tgz"
-          printf 'Install in Termux:\n\n```sh\nnpm install -g %s\n```\n' "$url" > notes.md
+          file="t3code-termux-$VERSION.tgz"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$file"
+          # npm refuses URL installs by default, so download first.
+          printf 'Install in Termux:\n\n```sh\ncurl -LO %s\nnpm install -g ./%s\n```\n' "$url" "$file" > notes.md
           gh release create "$TAG" ./t3code-termux-*.tgz \
             --repo "$GITHUB_REPOSITORY" --title "t3code-termux $VERSION" --notes-file notes.md
 
