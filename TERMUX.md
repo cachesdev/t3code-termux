@@ -39,6 +39,8 @@ Merge stable release tags (`vX.Y.Z`), never nightlies or previews. Use a merge, 
 
 Releases come from `termux` only. Bump `-termux.<n>` for a fork-only fix on the same upstream version. Push the tag `termux-v<version>`, where `<version>` matches `packaging/termux/package.json`. The workflow refuses a tag that does not match. Upstream's release workflow fires on `v*.*.*`, which is why fork tags start with `termux-`.
 
+A tag publishes twice. The workflow attaches the tarball to a GitHub release, and that release's notes give the `npm install -g <url>` command for it. It also publishes to npm. npm's automated review can hold a new version for an hour or more, so test fixes on a phone from the GitHub release.
+
 ## Packaging
 
 Users install with `npm install --global t3code-termux` or `npx`, and npm 12 skips dependency install scripts in both cases. So the tarball bundles its whole `node_modules` (`bundleDependencies`) with every native binary ready to load. Anything that only works after an install script is broken for users.
