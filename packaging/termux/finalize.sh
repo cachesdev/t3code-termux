@@ -20,6 +20,16 @@ for patch_file in patches/*.patch; do
   patch --quiet --forward -p1 -d "node_modules/$package" < "$patch_file"
 done
 
+# The prebuilt ffi-rs addon imports __clear_cache, which Android's libc does not export.
+# Build a library that exports only that function from clang's runtime, and link the addon to it.
+ffi="$(echo node_modules/@yuuang/ffi-rs-android-arm64/*.node)"
+clear_cache="$(dirname "$ffi")/libclear_cache.so"
+echo '{ global: __clear_cache; local: *; };' > "$TMPDIR/clear_cache.map"
+clang -shared -o "$clear_cache" \
+  -Wl,--undefined=__clear_cache -Wl,--version-script="$TMPDIR/clear_cache.map" \
+  "$(clang -print-libgcc-file-name)"
+patchelf --add-needed libclear_cache.so --set-rpath '$ORIGIN' "$ffi"
+
 pty=node_modules/node-pty
 if [[ ! -f "$pty/build/Release/pty.node" ]]; then
   echo "node-pty did not compile" >&2

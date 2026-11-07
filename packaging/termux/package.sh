@@ -26,7 +26,7 @@ termux() {
   docker exec --user 1000:1000 "$container" /data/data/com.termux/files/usr/bin/login -c "$1"
 }
 
-termux 'yes | pkg upgrade -y > /dev/null && pkg install -y nodejs python make clang patch > /dev/null'
+termux 'yes | pkg upgrade -y > /dev/null && pkg install -y nodejs python make clang patch patchelf > /dev/null'
 termux 'mkdir -p ~/out && bash ~/finalize.sh ~/stage ~/out'
 termux 'bash ~/smoke.sh ~/out/t3code-termux-*.tgz'
 
