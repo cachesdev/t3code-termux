@@ -10,7 +10,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cachesdev/t3code.git",
+    "url": "git+https://github.com/cachesdev/t3code-termux.git",
     "directory": "packaging/termux"
   },
   "bin": {

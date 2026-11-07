@@ -22,8 +22,9 @@ done
 
 # The prebuilt ffi-rs addon imports __clear_cache, which Android's libc does not export.
 # Build a library that exports only that function from clang's runtime, and link the addon to it.
-ffi="$(echo node_modules/@yuuang/ffi-rs-android-arm64/*.node)"
-clear_cache="$(dirname "$ffi")/libclear_cache.so"
+ffi_dir=node_modules/@yuuang/ffi-rs-android-arm64
+ffi="$(echo "$ffi_dir"/*.node)"
+clear_cache="$ffi_dir/libclear_cache.so"
 echo '{ global: __clear_cache; local: *; };' > "$TMPDIR/clear_cache.map"
 clang -shared -o "$clear_cache" \
   -Wl,--undefined=__clear_cache -Wl,--version-script="$TMPDIR/clear_cache.map" \
@@ -45,6 +46,7 @@ mv "$pty/build/Release/pty.node" "$prebuild/"
 rm -r "$pty/build" "$pty/binding.gyp"
 
 # Ship node_modules inside the package, so installs need no compiler.
+# npm packs bundled packages with their own file lists, so add the new library to ffi-rs's list.
 node -e '
   const fs = require("node:fs");
   const edit = (file, change) => {
@@ -56,11 +58,14 @@ node -e '
     delete pty.scripts;
     pty.gypfile = false;
   });
+  edit(process.argv[2], (ffi) => {
+    ffi.files.push("libclear_cache.so");
+  });
   edit("package.json", (pkg) => {
     delete pkg.allowScripts;
     pkg.bundleDependencies = Object.keys(pkg.dependencies);
   });
-' "$pty/package.json"
+' "$pty/package.json" "$ffi_dir/package.json"
 
 rm -rf patches package-lock.json
 

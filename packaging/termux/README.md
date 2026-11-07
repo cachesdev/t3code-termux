@@ -2,7 +2,7 @@
 
 Unofficial build of the [T3 Code](https://github.com/pingdotgg/t3code) server for [Termux](https://termux.dev) on Android. Pair the T3 Code mobile app or a browser to your phone, and agents work directly on the phone's files with the tools you installed in Termux.
 
-The T3 Code team does not publish or support this package. Report problems at [cachesdev/t3code](https://github.com/cachesdev/t3code/issues).
+The T3 Code team does not publish or support this package. Report problems at [cachesdev/t3code-termux](https://github.com/cachesdev/t3code-termux/issues).
 
 ## Requirements
 
