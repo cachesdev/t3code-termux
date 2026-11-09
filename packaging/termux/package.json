@@ -1,6 +1,6 @@
 {
   "name": "t3code-termux",
-  "version": "0.1.7-termux.2",
+  "version": "0.1.7-termux.3",
   "description": "Unofficial build of the T3 Code server for Termux on Android.",
   "keywords": [
     "android",
