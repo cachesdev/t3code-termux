@@ -8,7 +8,7 @@ The T3 Code team does not publish or support this package. Report problems at [c
 
 - An arm64 Android phone with Termux from [F-Droid](https://f-droid.org/packages/com.termux/) or [GitHub](https://github.com/termux/termux-app/releases).
 - Node 24 or newer: `pkg install nodejs`.
-- An agent CLI in Termux, such as Claude Code.
+- An agent CLI in Termux, such as Claude Code. See [Agents](#agents).
 
 ## Install
 
@@ -32,6 +32,28 @@ The server prints a QR code. Scan it with the T3 Code mobile app to pair. `termu
 Projects can use any folder Termux can read. Run `termux-setup-storage` once to reach shared storage at `~/storage/shared`.
 
 T3 Code starts agents from your Termux `PATH`, so it uses the same `claude` you run in the terminal.
+
+## Agents
+
+Install an agent in Termux:
+
+```sh
+t3 agents install claude
+t3 agents install codex
+t3 agents install pi
+```
+
+| Agent    | How it installs                                                                                                                                                                         |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claude` | Claude Code through [claude-code-android](https://github.com/ferrumclaudepilgrim/claude-code-android), which runs Anthropic's Linux build on Termux. The installer asks two questions.  |
+| `codex`  | Termux's `codex` package.                                                                                                                                                               |
+| `pi`     | Pi from npm, as its [Termux guide](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/termux.md) describes. Turn Pi on in Settings → Providers after installing. |
+
+`t3 agents list` shows where each agent is installed.
+
+You can also install from the browser. Open `http://localhost:3773` on the phone, go to Settings → Providers, and press **Install** on a missing agent. A terminal opens with the install command.
+
+When T3 Code shows an agent update, **Update now** runs the Termux update for that agent.
 
 ## Update
 

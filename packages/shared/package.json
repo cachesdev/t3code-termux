@@ -95,6 +95,10 @@
       "types": "./src/semver.ts",
       "import": "./src/semver.ts"
     },
+    "./termuxHarnesses": {
+      "types": "./src/termuxHarnesses.ts",
+      "import": "./src/termuxHarnesses.ts"
+    },
     "./Net": {
       "types": "./src/Net.ts",
       "import": "./src/Net.ts"

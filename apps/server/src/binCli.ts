@@ -91,6 +91,7 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig, termux = isTermux
       termux ? termuxCommands.service : serviceCommand,
       termux ? termuxCommands.update : updateCommand,
       termux ? termuxCommands.uninstall : uninstallCommand,
+      ...(termux ? [termuxCommands.agents] : []),
       serviceLauncherCommand,
       claudeHistoryCommand,
       sshHelperCommand,

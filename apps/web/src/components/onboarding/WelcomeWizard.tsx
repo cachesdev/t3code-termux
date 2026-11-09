@@ -9,7 +9,7 @@ import type {
   ServerConfig,
   ServerProvider,
 } from "@t3tools/contracts";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -22,9 +22,7 @@ import {
   AuthOrchestrationOperateScope,
   isManagedDriverAllowed,
   ProviderDriverKind,
-  ThreadId,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -36,8 +34,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
@@ -57,7 +53,7 @@ import {
   resolveOnboardingProviderLoginCommand,
   selectOnboardingProvidersByDriver,
 } from "../../onboarding/providerReadiness.logic";
-import { newProjectId, randomUUID } from "../../lib/utils";
+import { newProjectId } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
 import { readProjects, waitForProject } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
@@ -78,7 +74,6 @@ import {
   useEnvironmentScope,
   useEnvironmentsWithScope,
 } from "../../state/session";
-import { terminalEnvironment } from "../../state/terminal";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { connectPairing } from "../../connection/onboarding";
 import { getProviderSummary } from "../settings/providerStatus";
@@ -87,7 +82,6 @@ import { ChatGptWelcomeCoordinator } from "../settings/ChatGptWelcomeCoordinator
 import { AddManagedCodexAccountDialog, CodexSetupSection } from "../settings/CodexSetupSection";
 import { readCodexSetupMode } from "../settings/CodexSetupSection.logic";
 import { buildProviderInstanceUpdatePatch } from "../settings/SettingsPanels.logic";
-import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
 import { presentSavedCloudEnvironmentConnection } from "../cloud/cloudEnvironmentConnectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -104,13 +98,13 @@ import { Spinner } from "../ui/spinner";
 import { WizardPanel, WizardSteps, WizardPopup, WizardHeader } from "../ui/wizard";
 import { Dialog } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
+import { AgentInstallTerminal, type AgentTerminalSession } from "./AgentInstallTerminal";
 import { cn } from "../../lib/utils";
 import { formatRelativeTime } from "../../timestampFormat";
 
 type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
-const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
 const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
@@ -666,15 +660,6 @@ function PairingForm({
 const PRIMARY_AGENT_DRIVERS = ["codex", "claudeAgent"] as const;
 type OnboardingAgentDriver = (typeof PRIMARY_AGENT_DRIVERS)[number];
 
-interface AgentTerminalSession {
-  readonly environmentId: EnvironmentId;
-  readonly driver: OnboardingAgentDriver;
-  readonly providerInstanceId: ServerProvider["instanceId"];
-  readonly cwd: string;
-  readonly command: string;
-  readonly keybindings: ServerConfig["keybindings"];
-}
-
 function AgentsStep({
   environmentIds,
   onContinue,
@@ -808,7 +793,7 @@ function ConnectedAgentsStep({
                       )
                     : resolveOnboardingProviderInstallCommand(
                         driver,
-                        serverConfig.environment.platform.os,
+                        serverConfig.environment.platform,
                       ),
                   keybindings: serverConfig.keybindings,
                 });
@@ -841,7 +826,7 @@ function ConnectedAgentsStep({
                       )
                     : resolveOnboardingProviderInstallCommand(
                         driver,
-                        serverConfig.environment.platform.os,
+                        serverConfig.environment.platform,
                       ),
                   keybindings: serverConfig.keybindings,
                 });
@@ -945,7 +930,9 @@ function OnboardingCodexSetup({
       },
     });
   };
-  return existingChosen ? (
+  // T3's managed Codex runtime has no Android build, so Termux installs the Codex package.
+  const useCodexCli = existingChosen || serverConfig.environment.platform.termux === true;
+  return useCodexCli ? (
     <AgentCard
       driver="codex"
       provider={provider}
@@ -1025,167 +1012,6 @@ function AgentCard({
             {providerState === "signIn" ? "Sign in" : "Install"}
           </Button>
         )}
-      </div>
-    </div>
-  );
-}
-
-function AgentInstallTerminal({
-  session,
-  onClose,
-}: {
-  readonly session: AgentTerminalSession;
-  readonly onClose: () => void;
-}) {
-  const { command, cwd, driver, environmentId, keybindings, providerInstanceId } = session;
-  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
-  const [advancedTypography] = useLocalStorage(
-    TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-    false,
-    Schema.Boolean,
-  );
-  const openTerminal = useAtomCommand(terminalEnvironment.open, { reportFailure: false });
-  const writeTerminal = useAtomCommand(terminalEnvironment.write, { reportFailure: false });
-  const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
-  const setupQueueRef = useRef(Promise.resolve());
-  const setupGenerationRef = useRef(0);
-  const activeSetupGenerationRef = useRef<number | null>(null);
-  const [terminalId] = useState(() => `onboarding-${driver}-${randomUUID()}`);
-  const threadRef = scopeThreadRef(environmentId, AGENT_ONBOARDING_THREAD_ID);
-  const [setupAttempt, setSetupAttempt] = useState(0);
-  const [setupState, setSetupState] = useState<
-    "preparing" | "ready" | "openFailed" | "writeFailed"
-  >("preparing");
-  const terminalReady = setupState === "ready" || setupState === "writeFailed";
-
-  // StrictMode can finish a cancelled open after replacement setup; it must not close or pre-type into that
-  // session.
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the setup PTY, types the command into it, and closes it on cleanup
-  useEffect(() => {
-    const generation = setupGenerationRef.current + 1;
-    setupGenerationRef.current = generation;
-    activeSetupGenerationRef.current = generation;
-    // oxlint-disable-next-line react/set-state-in-effect -- A retry or a new command reopens the terminal, which shows as preparing until the open settles.
-    setSetupState("preparing");
-
-    setupQueueRef.current = setupQueueRef.current.then(async () => {
-      if (activeSetupGenerationRef.current !== generation) return;
-      if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
-        setSetupState("openFailed");
-        return;
-      }
-      const opened = await openTerminal({
-        environmentId,
-        input: {
-          threadId: AGENT_ONBOARDING_THREAD_ID,
-          terminalId,
-          cwd,
-          providerInstanceId,
-        },
-      });
-      if (opened._tag !== "Success") {
-        if (activeSetupGenerationRef.current === generation) setSetupState("openFailed");
-        return;
-      }
-
-      if (activeSetupGenerationRef.current !== generation) return;
-      if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
-        setSetupState("writeFailed");
-        return;
-      }
-
-      const wrote = await writeTerminal({
-        environmentId,
-        input: { threadId: AGENT_ONBOARDING_THREAD_ID, terminalId, data: command },
-      });
-      if (activeSetupGenerationRef.current !== generation) return;
-      setSetupState(wrote._tag === "Success" ? "ready" : "writeFailed");
-    });
-
-    // Revocation leaves the PTY running; close only while terminal access remains.
-    return () => {
-      if (activeSetupGenerationRef.current === generation) {
-        activeSetupGenerationRef.current = null;
-      }
-      setupQueueRef.current = setupQueueRef.current.then(async () => {
-        if (!readEnvironmentScope(environmentId, AuthTerminalOperateScope)) return;
-        await closeTerminal({
-          environmentId,
-          input: { threadId: AGENT_ONBOARDING_THREAD_ID, terminalId, deleteHistory: true },
-        });
-      });
-    };
-  }, [
-    closeTerminal,
-    command,
-    cwd,
-    environmentId,
-    openTerminal,
-    providerInstanceId,
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Retry bumps setupAttempt to open the terminal again.
-    setupAttempt,
-    terminalId,
-    writeTerminal,
-  ]);
-
-  return (
-    <div
-      data-thread-terminal-drawer
-      className="mt-4 overflow-hidden rounded-lg border border-border/70 bg-background text-foreground"
-    >
-      <div className="flex items-center justify-between border-b border-border/60 bg-background/60 px-3 py-1.5">
-        <span className="text-2xs font-medium text-muted-foreground">
-          {!canOperateTerminal ? (
-            "This connection cannot control terminals."
-          ) : setupState === "writeFailed" ? (
-            <>
-              Run <code className="rounded bg-muted px-1 font-mono">{command}</code> in this
-              terminal.
-            </>
-          ) : setupState === "ready" ? (
-            "Review the command, then press Enter to run it."
-          ) : setupState === "openFailed" ? (
-            "Could not open the setup terminal."
-          ) : (
-            "Preparing command..."
-          )}
-        </span>
-        <div className="flex items-center gap-1">
-          {setupState === "openFailed" ? (
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={!canOperateTerminal}
-              onClick={() => {
-                if (readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
-                  setSetupAttempt((value) => value + 1);
-                }
-              }}
-            >
-              Retry
-            </Button>
-          ) : null}
-          <Button size="xs" variant="ghost-muted" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
-      <div className="h-64">
-        {terminalReady ? (
-          <TerminalViewport
-            threadRef={threadRef}
-            threadId={AGENT_ONBOARDING_THREAD_ID}
-            terminalId={terminalId}
-            terminalLabel={`Install ${driver}`}
-            cwd={cwd}
-            providerInstanceId={providerInstanceId}
-            advancedTypography={advancedTypography}
-            onSessionExited={onClose}
-            autoFocus
-            visible
-            keybindings={keybindings}
-          />
-        ) : null}
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { compareSemverVersions, satisfiesSemverRange } from "@t3tools/shared/sem
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import { resolveCommandPath, resolveSpawnCommand } from "@t3tools/shared/shell";
+import { findTermuxHarness, type TermuxHarness } from "@t3tools/shared/termuxHarnesses";
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as DateTime from "effect/DateTime";
@@ -463,6 +464,40 @@ const resolvePnpmGlobalLatestVersion = Effect.fn("resolvePnpmGlobalLatestVersion
   return nonEmptyString(listedEntries?.[0]?.dependencies?.[packageName]?.version);
 });
 
+/** Reads the candidate version from `apt-cache policy`, without the package revision. */
+function parseAptCandidateVersion(output: string): string | null {
+  return /^\s*Candidate:\s*(\d+\.\d+\.\d+)/m.exec(output)?.[1] ?? null;
+}
+
+// Vendor updaters download Linux builds that do not run on Termux, so harnesses with a
+// Termux recipe update through it. A Termux package is compared with apt's version, not npm's.
+const resolveTermuxHarnessMaintenance = Effect.fn("resolveTermuxHarnessMaintenance")(function* (
+  definition: PackageManagedProviderMaintenanceDefinition,
+  harness: TermuxHarness,
+  context: ProviderMaintenanceResolutionContext,
+) {
+  const services = yield* Effect.context<ProviderMaintenanceResolverServices>();
+  const [executable, ...args] = harness.update;
+  const termuxPackage = harness.termuxPackage;
+  const aptVersionLookup = termuxPackage && {
+    latestVersion: null,
+    lookupLatestVersion: runProbe("apt-cache", ["policy", termuxPackage], context.env).pipe(
+      Effect.map((output) => (output ? parseAptCandidateVersion(output) : null)),
+      Effect.provideContext(services),
+    ),
+  };
+  return makeProviderMaintenanceCapabilities({
+    provider: definition.provider,
+    packageName: definition.npmPackageName,
+    updateExecutable: executable === harness.command ? context.resolvedCommandPath : executable,
+    updateArgs: args,
+    updateLockKey: `termux:${harness.driver}`,
+    platform: context.platform,
+    env: context.env,
+    ...aptVersionLookup,
+  });
+});
+
 export const resolvePackageManagedProviderMaintenance = Effect.fn(
   "resolvePackageManagedProviderMaintenance",
 )(function* (
@@ -474,6 +509,11 @@ export const resolvePackageManagedProviderMaintenance = Effect.fn(
       provider: definition.provider,
       packageName: definition.npmPackageName,
     });
+  }
+  const termuxHarness =
+    context.platform === "android" ? findTermuxHarness(definition.provider) : undefined;
+  if (termuxHarness) {
+    return yield* resolveTermuxHarnessMaintenance(definition, termuxHarness, context);
   }
   const manual = makeManualOnlyProviderMaintenanceCapabilities({
     provider: definition.provider,

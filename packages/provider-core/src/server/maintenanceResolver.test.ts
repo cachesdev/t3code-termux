@@ -667,6 +667,66 @@ it.layer(
     }),
   );
 
+  it.effect("updates Claude on Termux through its launcher", () =>
+    Effect.gen(function* () {
+      const launcher = "/data/data/com.termux/files/usr/bin/claude";
+      const capabilities = yield* resolveInstall({
+        definition: claudeUpdate,
+        resolved: launcher,
+        real: launcher,
+        platform: "android",
+      });
+
+      expect(capabilities.update).toMatchObject({
+        executable: launcher,
+        args: ["--update-now", "--version"],
+        lockKey: "termux:claudeAgent",
+      });
+    }),
+  );
+
+  // Termux packages Codex behind npm, so comparing against the registry would
+  // report an update `pkg` cannot install yet.
+  it.effect("compares a Termux Codex package against apt", () =>
+    Effect.gen(function* () {
+      const codexPath = "/data/data/com.termux/files/usr/bin/codex";
+      const capabilities = yield* resolvePackageManagedProviderMaintenance(
+        {
+          provider: driver("codex"),
+          npmPackageName: "@openai/codex",
+          nativeUpdate: { args: ["update"], requiresCommandPath: true },
+        },
+        {
+          binaryPath: "codex",
+          resolvedCommandPath: codexPath,
+          realCommandPath: codexPath,
+          env: {},
+          platform: "android",
+        },
+      ).pipe(
+        Effect.provideService(HostProcess.Platform, "android"),
+        Effect.provideService(
+          ChildProcessSpawner.ChildProcessSpawner,
+          stdoutSpawner(() => "codex:\n  Installed: 0.166.0\n  Candidate: 0.167.0-1\n"),
+        ),
+      );
+
+      const latest = yield* resolveLatestProviderVersion(capabilities).pipe(
+        Effect.provide(ProviderLatestVersions.layer),
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("the Termux version should not come from npm")),
+        ),
+      );
+
+      expect(latest).toBe("0.167.0");
+      expect(capabilities.update).toMatchObject({
+        executable: "pkg",
+        args: ["install", "-y", "codex"],
+      });
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
   // Chocolatey publishes behind npm, so comparing against the registry would
   // report an update `choco upgrade` cannot install yet.
   it.effect("compares a Chocolatey Claude install against choco search", () =>

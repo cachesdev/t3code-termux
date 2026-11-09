@@ -212,6 +212,7 @@ export const make = Effect.gen(function* () {
       os: platformOs(hostPlatform),
       arch: platformArch(hostArchitecture),
       ...(machine === null ? {} : { machine }),
+      ...(hostPlatform === "android" ? { termux: true } : {}),
     },
     serverVersion: packageJson.version,
     orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,

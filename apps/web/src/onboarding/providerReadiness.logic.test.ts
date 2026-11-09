@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   getOnboardingProviderState,
+  resolveOnboardingProviderInstallCommand,
   resolveOnboardingProviderLoginCommand,
   selectOnboardingProvidersByDriver,
 } from "./providerReadiness.logic";
@@ -227,5 +228,17 @@ describe("resolveOnboardingProviderLoginCommand", () => {
         "unknown",
       ),
     ).toBe("codex login");
+  });
+});
+
+describe("resolveOnboardingProviderInstallCommand", () => {
+  it("installs with the Termux recipe on a Termux server", () => {
+    expect(
+      resolveOnboardingProviderInstallCommand("codex", {
+        os: "unknown",
+        arch: "arm64",
+        termux: true,
+      }),
+    ).toBe("pkg install codex");
   });
 });

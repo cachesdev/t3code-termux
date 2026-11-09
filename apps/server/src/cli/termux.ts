@@ -1,5 +1,7 @@
 // Commands for the t3code-termux npm package, which runs the server in Termux on Android.
 // The desktop versions manage downloaded runtimes and system services that Android does not have.
+import { resolveCommandPath } from "@t3tools/shared/shell";
+import { TERMUX_HARNESSES } from "@t3tools/shared/termuxHarnesses";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -22,6 +24,26 @@ export class TermuxUpdateError extends Schema.TaggedError<TermuxUpdateError>()(
   }
 }
 
+export class TermuxAgentInstallError extends Schema.TaggedError<TermuxAgentInstallError>()(
+  "TermuxAgentInstallError",
+  { agent: Schema.String, detail: Schema.String },
+) {
+  override get message(): string {
+    return `Could not install ${this.agent}: ${this.detail}`;
+  }
+}
+
+/** Runs a command attached to this terminal, so the user sees its output and answers its prompts. */
+const runAttached = Effect.fn("termux.runAttached")(function* (
+  command: string,
+  args: ReadonlyArray<string>,
+) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return yield* spawner.exitCode(
+    ChildProcess.make(command, args, { stdin: "inherit", stdout: "inherit", stderr: "inherit" }),
+  );
+});
+
 const updateCommand = Command.make("update", {
   version: Argument.String("version").pipe(
     Argument.withDescription("Exact version to install. Defaults to the latest release."),
@@ -32,22 +54,63 @@ const updateCommand = Command.make("update", {
   Command.withHandler(({ version }) =>
     Effect.gen(function* () {
       const spec = `${PACKAGE_NAME}@${Option.getOrElse(version, () => "latest")}`;
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const exitCode = yield* spawner
-        .exitCode(
-          ChildProcess.make("npm", ["install", "--global", spec], {
-            stdin: "inherit",
-            stdout: "inherit",
-            stderr: "inherit",
-          }),
-        )
-        .pipe(Effect.mapError((cause) => new TermuxUpdateError({ detail: String(cause) })));
+      const exitCode = yield* runAttached("npm", ["install", "--global", spec]).pipe(
+        Effect.mapError((cause) => new TermuxUpdateError({ detail: String(cause) })),
+      );
       if (exitCode !== 0) {
         return yield* new TermuxUpdateError({ detail: `npm exited with ${exitCode}` });
       }
       yield* Console.log("Updated. Restart `t3 serve` to use the new version.");
     }),
   ),
+);
+
+const agentsInstallCommand = Command.make("install", {
+  harness: Argument.ChoiceWithValue(
+    "name",
+    TERMUX_HARNESSES.map((harness) => [harness.name, harness] as const),
+  ),
+}).pipe(
+  Command.withDescription("Install an agent harness that works in Termux."),
+  Command.withHandler(({ harness }) =>
+    Effect.gen(function* () {
+      const exitCode = yield* runAttached("sh", ["-c", harness.install]).pipe(
+        Effect.mapError(
+          (cause) => new TermuxAgentInstallError({ agent: harness.label, detail: String(cause) }),
+        ),
+      );
+      if (exitCode !== 0) {
+        return yield* new TermuxAgentInstallError({
+          agent: harness.label,
+          detail: `the installer exited with ${exitCode}`,
+        });
+      }
+      yield* Console.log(
+        `Installed ${harness.label}. Refresh providers in T3 Code settings to use it.`,
+      );
+    }),
+  ),
+);
+
+const agentsListCommand = Command.make("list").pipe(
+  Command.withDescription("List the agent harnesses you can install, and where each one is."),
+  Command.withHandler(() =>
+    Effect.forEach(
+      TERMUX_HARNESSES,
+      (harness) =>
+        resolveCommandPath(harness.command).pipe(
+          Effect.flatMap((path) =>
+            Console.log(`${harness.name.padEnd(8)}${path ?? "not installed"}`),
+          ),
+        ),
+      { discard: true },
+    ),
+  ),
+);
+
+const agentsCommand = Command.make("agents").pipe(
+  Command.withDescription("Install agent harnesses in Termux."),
+  Command.withSubcommands([agentsInstallCommand, agentsListCommand]),
 );
 
 /** Accepts any arguments and prints how to do the same thing in Termux. */
@@ -59,6 +122,7 @@ const noticeCommand = (name: string, notice: string) =>
 
 export const termuxCommands = {
   update: updateCommand,
+  agents: agentsCommand,
   up: noticeCommand("up", KEEP_RUNNING_HINT),
   service: noticeCommand("service", KEEP_RUNNING_HINT),
   uninstall: noticeCommand(

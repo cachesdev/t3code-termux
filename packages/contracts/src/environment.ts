@@ -48,6 +48,8 @@ export const ExecutionEnvironmentPlatform = Schema.Struct({
   os: ExecutionEnvironmentPlatformOs,
   arch: ExecutionEnvironmentPlatformArch,
   machine: ForwardCompatibleOptional(EnvironmentMachineKind),
+  // Set by the t3code-termux build. The OS stays "unknown" so store clients still decode it.
+  termux: Schema.optionalKey(Schema.Boolean),
 });
 
 // Kept outside settings.ts to avoid an orchestration import cycle.

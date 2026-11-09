@@ -1,10 +1,12 @@
 import {
   ClaudeSettings,
   CodexSettings,
+  type ExecutionEnvironmentPlatform,
   type ExecutionEnvironmentPlatformOs,
   type ServerProvider,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { findTermuxHarness } from "@t3tools/shared/termuxHarnesses";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -86,10 +88,12 @@ const NATIVE_INSTALL_COMMANDS = {
 
 export function resolveOnboardingProviderInstallCommand(
   driver: keyof typeof NATIVE_INSTALL_COMMANDS,
-  platform: ExecutionEnvironmentPlatformOs,
+  platform: ExecutionEnvironmentPlatform,
 ): string {
+  const termuxHarness = platform.termux ? findTermuxHarness(driver) : undefined;
+  if (termuxHarness) return termuxHarness.install;
   const commands = NATIVE_INSTALL_COMMANDS[driver];
-  return platform === "windows" ? commands.windows : commands.posix;
+  return platform.os === "windows" ? commands.windows : commands.posix;
 }
 
 export function resolveOnboardingProviderLoginCommand(

@@ -1,4 +1,6 @@
 import { SettingsGroup } from "./SettingsGroup";
+import { TermuxInstallSection } from "./TermuxInstallSection";
+import { findTermuxHarness } from "@t3tools/shared/termuxHarnesses";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import {
   AuthSettingsWriteScope,
@@ -1287,6 +1289,12 @@ function ProviderInstanceRow({
     favorite.provider === instanceId ? Result.succeed(favorite.model) : Result.failVoid,
   );
   const resetLabel = driverOption?.label ?? String(driver);
+  const serverPlatform = useAtomValue(serverEnvironment.configValueAtom(environmentId))?.environment
+    .platform;
+  const termuxHarness =
+    serverPlatform?.termux && liveProvider?.enabled && !liveProvider.installed
+      ? findTermuxHarness(driver)
+      : undefined;
   const projectOverride = showProjectOverride
     ? {
         value: projectOverrideValue,
@@ -1332,7 +1340,13 @@ function ProviderInstanceRow({
       }
       canWriteSettings={canWriteSettings}
       setup={
-        mode === "editor" && driver === "antigravity" ? (
+        mode === "editor" && !readOnly && liveProvider && termuxHarness ? (
+          <TermuxInstallSection
+            environmentId={environmentId}
+            provider={liveProvider}
+            harness={termuxHarness}
+          />
+        ) : mode === "editor" && driver === "antigravity" ? (
           <ProviderSetupSection
             environmentId={environmentId}
             environmentLabel={environmentLabel}
