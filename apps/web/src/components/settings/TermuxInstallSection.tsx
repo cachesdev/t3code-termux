@@ -11,7 +11,7 @@ import { useState } from "react";
 import { serverEnvironment } from "../../state/server";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { AgentInstallTerminal } from "../onboarding/AgentInstallTerminal";
+import { AgentInstallTerminal } from "../onboarding/WelcomePage";
 import { Button } from "../ui/button";
 import { SettingsRow } from "./settingsLayout";
 

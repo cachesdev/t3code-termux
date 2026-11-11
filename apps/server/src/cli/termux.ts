@@ -125,6 +125,10 @@ export const termuxCommands = {
   agents: agentsCommand,
   up: noticeCommand("up", KEEP_RUNNING_HINT),
   service: noticeCommand("service", KEEP_RUNNING_HINT),
+  install: noticeCommand(
+    "install",
+    `npm already installed the \`t3\` command. Update it with \`t3 update\`.`,
+  ),
   uninstall: noticeCommand(
     "uninstall",
     `Remove T3 Code with \`npm uninstall --global ${PACKAGE_NAME}\`. Your projects and threads stay in ~/.t3.`,

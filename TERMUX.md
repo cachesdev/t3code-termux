@@ -6,14 +6,14 @@ This fork publishes the T3 Code server to npm as `t3code-termux`, built for Term
 
 Upstream files the fork edits. These are where merge conflicts land:
 
-- `apps/server/src/bin.ts`: calls `installLinkFallback()` on Termux at the top of the entrypoint block, before any dynamic import. It must stay ahead of every module that captures `fs.link`.
-- `apps/server/src/binCli.ts`: `makeCli` takes a `termux` flag, and four entries in the subcommand list read `termux ? termuxCommands.<name> : <name>Command`. A fifth entry adds `termuxCommands.agents` on Termux only. Keep that shape whatever upstream does to the list.
+- `apps/server/src/bin.ts`: calls `installLinkFallback()` on Termux at the top of the entrypoint block, before the service launcher or `binMain.ts` loads. It must stay ahead of every module that captures `fs.link`.
+- `apps/server/src/binCli.ts`: `makeCli` takes a `termux` flag, and five entries in the subcommand list read `termux ? termuxCommands.<name> : <name>Command` (`up`, `service`, `update`, `install`, `uninstall`). Another entry adds `termuxCommands.agents` on Termux only. Keep that shape whatever upstream does to the list.
 - `packages/provider-core/src/server/maintenanceResolver.ts`: on Android, `resolvePackageManagedProviderMaintenance` returns early for any driver in `termuxHarnesses.ts`, so **Update now** runs the recipe's update command. A recipe with a Termux package reads the latest version from `apt-cache policy`.
 - `apps/server/src/provider/ProviderRegistry.ts`: `classifyCompatibility` also runs `applyTermuxInstallHint`, which adds the `t3 agents install` command to a missing agent's status message. The mobile app shows that message.
 - `packages/contracts/src/environment.ts` and `apps/server/src/environment/ServerEnvironment.ts`: the environment platform gets an optional `termux` key. The OS stays `unknown`, because store builds of the mobile app reject OS values they do not know.
 - `packages/shared/package.json`: exports `./termuxHarnesses`.
 - `apps/web/src/onboarding/providerReadiness.logic.ts`: `resolveOnboardingProviderInstallCommand` takes the whole platform and returns the Termux recipe when `termux` is set.
-- `apps/web/src/components/onboarding/WelcomeWizard.tsx`: on Termux, Codex onboarding shows the Codex CLI card, since the managed Codex runtime has no Android build. The install terminal moved out to `AgentInstallTerminal.tsx` so Settings can reuse it.
+- `apps/web/src/components/onboarding/WelcomePage.tsx`: the install command call passes the whole platform. On Termux, Codex skips the managed setup card and installs in the terminal, since the managed Codex runtime has no Android build. `AgentInstallTerminal` and `AgentTerminalSession` are exported, and the session's `driver` is a plain string, so Settings can reuse the terminal.
 - `apps/web/src/components/settings/ProviderSettingsPanel.tsx`: on Termux, a missing agent with a recipe shows `TermuxInstallSection` in the card's `setup` slot.
 - `AGENTS.md`: one line under the title that points here.
 
@@ -33,14 +33,14 @@ Fork-only files. These never conflict, but they depend on upstream internals:
 
 Merge stable release tags (`vX.Y.Z`), never nightlies or previews. Use a merge, since `termux` is published and must not be rebased.
 
-1. `git fetch upstream tag vX.Y.Z --no-tags`, then `git merge vX.Y.Z` on `termux`. Resolve conflicts so every change in Fork changes survives.
+1. `git fetch upstream tag vX.Y.Z --no-tags`, then `git merge vX.Y.Z` on `termux`. Resolve conflicts so every change in Fork changes survives. A blobless clone of the fork cannot download upstream files from `origin`, so mark upstream as a promisor first: `git config remote.upstream.promisor true` and `git config remote.upstream.partialclonefilter blob:none`.
 2. Check that upstream did not move what the fork depends on. Done when each of these holds:
-   - `update`, `up`, `service` and `uninstall` still exist in `binCli.ts`, and each still has a Termux replacement.
+   - Every lifecycle command in `binCli.ts` (`update`, `up`, `service`, `install`, `uninstall`, and any new one) has a Termux replacement.
    - `selectCliRuntimeExternalDependencies` and `scripts/update-release-package-versions.ts` still exist with the same signatures.
    - `setup-ci-deps` still takes the inputs `termux.yml` passes.
    - Any new runtime external package in `scripts/lib/cli-external-packages.ts` has an android-arm64 build, or the server still starts without it.
    - Any package `finalize.sh` handles by name (`node-pty`, `@yuuang/ffi-rs-android-arm64`) is still the one npm installs.
-   - Every driver in `termuxHarnesses.ts` still builds its maintenance through `makePackageManagedProviderMaintenanceResolver`, and the Welcome page and provider settings still open `AgentInstallTerminal` for installs.
+   - Every driver in `termuxHarnesses.ts` still builds its maintenance through `makePackageManagedProviderMaintenanceResolver`, and the Welcome page and provider settings still open `AgentInstallTerminal` from `WelcomePage.tsx` for installs.
 3. Set `version` in `packaging/termux/package.json` to `X.Y.Z-termux.1`.
 4. Typecheck the server, then push and run the Termux package workflow by hand (`gh workflow run termux.yml --ref termux`). Done when all of its jobs pass, which includes the smoke test on arm64.
 5. Disable any upstream workflow the merge added: `gh workflow list --all` should show only `termux.yml` as active. GitHub turns on new workflow files that reach the default branch.
